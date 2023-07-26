@@ -1,0 +1,98 @@
+###load packages
+###BiocManager::install("DESeq2")
+###library(DESeq2)
+if(!require(edgeR)) BiocManager::install("edgeR")
+if(!require(org.Mm.eg.db))BiocManager::install("org.Mm.eg.db")
+if(!require(genefilter))BiocManager::install("genefilter")
+if(!require(pheatmap))install.packages('pheatmap')
+if(!require(manhattanly))install.packages('manhattanly')
+if(!require(AnnotationDbi))BiocManager::install(c("AnnotationDbi"))
+if(!require(ggrepel))install.packages("ggrepel")
+if(!require(enrichR))install.packages("enrichR")
+
+library(edgeR)
+library(org.Mm.eg.db)
+library(genefilter)
+library(pheatmap)
+library(AnnotationDbi)
+library(dplyr)
+library(manhattanly)
+library(enrichR)
+library(ggplot2)
+library(ggrepel)
+library(clipr)
+
+if(!require(org.Hs.eg.db))BiocManager::install("org.Hs.eg.db")
+
+
+#####################################################################
+################# Merge gene counts #################################
+#####################################################################
+##Input data
+wd="E:/RNAseq/ISR/Differential_gene_expression_limma/"
+files=list.files(wd,pattern="txt$", full.names = T)
+library(data.table)
+
+
+##Extract useful item integration
+Newcountdata <- readDGE(files, columns = c(2,10))##取出文件中的第2，10行数据.相比于分别读入几个文本文件然后合并为一个计数矩阵，edgeR的readDGE函数可一步完成，得到的DGEList对象中包含一个计数矩阵，它的各行分别对应每个基因不重复的Ensembl基因ID，列分别对应每个样品。
+Mydata=as.data.frame(Newcountdata$counts)##上步分为两个部分，仅取出数据部分存为数据框格式
+Mydata[1:10,]##观察前10行情况
+
+
+
+##改首行标题
+colnames(Mydata) = c("IC2HvsNS.Controls", "IC2HvsNS.P", "IC2HvsNS.STAT1mut", "IC2HvsNS.TLR3mut", 
+                     "IC6HvsNS.Controls", "IC6HvsNS.P", "IC6HvsNS.STAT1mut", "IC6HvsNS.TLR3mut", 
+                     "IFNA8HvsNS.Controls", "IFNA8HvsNS.P", "IFNA8HvsNS.STAT1mut", "IFNA8HvsNS.TLR3mut", 
+                     "PvsControl.IC2HvsNS", "PvsControl.IC6HvsNS", "PvsControl.IFNA8HvsNS", "PvsControl.NS", 
+                     "PvsSTAT1mut.IC2HvsNS", "PvsSTAT1mut.IC6HvsNS", "PvsSTAT1mut.IFNA8HvsNS", "PvsSTAT1mut.NS", 
+                     "PvsTLR3mut.IC2HvsNS", "PvsTLR3mut.IC6HvsNS", "PvsTLR3mut.IFNA8HvsNS", "PvsTLR3mut.NS")
+Mydata[1:10,]##观察前10行情况
+
+
+
+
+#####Annotate genes function
+Mydataframe=as.data.frame(Mydata)
+
+#备用注释方法1 Mydataframe$Symbol=mapIds(org.Hs.eg.db,
+                          #keys=row.names(Mydataframe),
+                          #column="SYMBOL",
+                          #keytype="ENSEMBL",
+                          #multiVals12="first")
+#备用注释方法2 Mydataframe$Symbol=select(org.Mm.eg.db, keys=row.names(Mydataframe), column="SYMBOL",keytype="ENSEMBL")
+Annotate_mgenes<-function(df){#########input data frame, row name is ensembl ID or ID.version
+  df=as.data.frame(df)
+  esbid=gsub("\\..*","",row.names(df))
+  df $Symbol <- mapIds(org.Hs.eg.db, #####human genome
+                       keys=esbid,
+                       column="SYMBOL",
+                       keytype="ENSEMBL",
+                       multiVals="first")
+  return(df)
+}
+
+Mydataframe=Annotate_mgenes(Mydataframe)##注释，添加了与基因ID相应的Symbol列
+row.names(Mydataframe)=paste(Mydataframe$Symbol,row.names(Mydataframe),sep = "_")##将基因ID与Symbol列整合为Symbol_基因ID
+#备用选项 Mydataframe=Mydataframe[!is.na(Mydataframe$Symbol),]
+
+
+#########heat map annotation
+sample=c("IC2HvsNS.Controls", "IC2HvsNS.P", "IC2HvsNS.STAT1mut", "IC2HvsNS.TLR3mut", 
+         "IC6HvsNS.Controls", "IC6HvsNS.P", "IC6HvsNS.STAT1mut", "IC6HvsNS.TLR3mut", 
+         "IFNA8HvsNS.Controls", "IFNA8HvsNS.P", "IFNA8HvsNS.STAT1mut", "IFNA8HvsNS.TLR3mut", 
+         "PvsControl.IC2HvsNS", "PvsControl.IC6HvsNS", "PvsControl.IFNA8HvsNS", "PvsControl.NS", 
+         "PvsSTAT1mut.IC2HvsNS", "PvsSTAT1mut.IC6HvsNS", "PvsSTAT1mut.IFNA8HvsNS", "PvsSTAT1mut.NS", 
+         "PvsTLR3mut.IC2HvsNS", "PvsTLR3mut.IC6HvsNS", "PvsTLR3mut.IFNA8HvsNS", "PvsTLR3mut.NS")##将数据的行名列出
+anno=as.data.frame(sample)
+row.names(anno)=anno[[1]]
+colnames(anno)[1]="Group"
+
+
+#########heat map plot
+ISR_list=c("ATF4","DDIT3","PPP1R15A","TRIB3","GADD45A","ASNS","CDKN1A","AURKA","XPOT","SARS","WARS","ERO1L")##将ISR的基因列举出来
+ISRs=Mydataframe[Mydataframe$Symbol%in%ISR_list,]##将相关ISR的logFC数据提取出来
+ISRs$Symbol=NULL##将Symbol行去除
+colnames(ISRs)=anno$Group##列名命名
+pheatmap(ISRs, annotation_col = anno,fontsize_number = 3,display_numbers =2,fontsize = 4,border_color = NA,cluster_cols = F)##画ISR的logFC热图
