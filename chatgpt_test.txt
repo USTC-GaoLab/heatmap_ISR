@@ -1,0 +1,6 @@
+ChatGPT GitHub connector push test
+Date: 2026-09-11
+Account: USTC-GaoLab
+Repository: heatmap_ISR
+Branch: chatgpt-push-test-20260911
+Purpose: verify write access without modifying main.
