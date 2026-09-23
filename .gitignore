@@ -1,0 +1,9 @@
+# Generated files
+results/
+output/
+figures/
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
